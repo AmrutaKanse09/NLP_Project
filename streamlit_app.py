@@ -152,12 +152,31 @@ def resource_card(r: dict, prefix: str, score=None, score_label="Match", reasons
         left, right = st.columns([5, 2])
         with left:
             cost = "FREE" if r["cost"].lower() == "free" else "PAID"
+            
+            # Sentiment badge
+            polarity = r.get("description_polarity", 0.0)
+            if polarity > 0.2:
+                sentiment_emoji = "😊"
+                sentiment_label = "Positive"
+                sentiment_html = f' <span class="tag">{sentiment_emoji} {sentiment_label}</span>'
+            elif polarity < -0.2:
+                sentiment_emoji = "😞"
+                sentiment_label = "Negative"
+                sentiment_html = f' <span class="tag">{sentiment_emoji} {sentiment_label}</span>'
+            else:
+                sentiment_html = ""
+            
+            # Discovered topic badge
+            discovered_topic = r.get("discovered_topic", "")
+            topic_html = f' <span class="tag">{discovered_topic}</span>' if discovered_topic else ""
+
             st.markdown(
-                f"<div class='resource-card'><div class='resource-meta'>RESOURCE / {int(r['id']):03d}</div>"
-                f"<h4>{r['title']}</h4>"
-                f"<div class='resource-meta'>{level_badge(r['level'])} "
-                f"<span class='tag'>{r['topic'].upper()}</span> {r['format']} · {r['duration_hours']:g} H · "
-                f"{cost} · ★ {r['rating']} · {r['provider']}</div>"
+                "<div class='resource-card'><div class='resource-meta'>RESOURCE / "
+                f"{rid:03d}</div><h4>{r['title']}</h4>"
+                "<div class='resource-meta'>" + level_badge(r['level']) + " "
+                f"<span class='tag'>{r['topic'].upper()}</span> {r['format']} · "
+                f"{r['duration_hours']:g} H · {cost} · ★ {r['rating']} · {r['provider']}"
+                f"{sentiment_html}{topic_html}</div>"
                 f"<div class='resource-description'>{r['description']}</div></div>",
                 unsafe_allow_html=True,
             )
@@ -178,8 +197,6 @@ def resource_card(r: dict, prefix: str, score=None, score_label="Match", reasons
                     st.markdown("<span class='status-badge'>Completed</span>", unsafe_allow_html=True)
                 else:
                     st.button("Mark completed", key=f"{prefix}_done_{rid}", on_click=complete_cb, args=(rid,))
-
-
 def preferences_form(p, form_key: str) -> None:
     """Create a new profile (p is None) or edit an existing one."""
     creating = p is None
@@ -390,6 +407,11 @@ with tab_browse:
         df = df[df["format"].isin(f_formats)]
     if f_free:
         df = df[df["cost"] == "Free"]
+        # --- Filter by discovered topic (LDA/NMF) ---
+    discovered_topics = sorted(engine.resources["discovered_topic"].dropna().unique())
+    f_discovered = st.multiselect("Discovered Topic (AI)", discovered_topics)
+    if f_discovered:
+        df = df[df["discovered_topic"].isin(f_discovered)]
     st.dataframe(df[["id", "title", "topic", "level", "format", "duration_hours", "cost", "rating", "provider"]],
                  hide_index=True, width="stretch",
                  column_config={"duration_hours": st.column_config.NumberColumn("Hours"),
