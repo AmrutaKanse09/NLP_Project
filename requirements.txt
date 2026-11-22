@@ -5,3 +5,7 @@ rich>=13.0
 streamlit>=1.50
 openai>=1.0
 python-dotenv>=1.0
+textblob
+vaderSentiment
+langdetect
+deep-translator

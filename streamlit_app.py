@@ -13,7 +13,7 @@ load_dotenv()  # loads GROQ_API_KEY from .env before any Groq call
 from recommender import (FORMATS, LEVELS, STRATEGIES, ProfileStore, RecommenderEngine, UserProfile, evaluate,
                          load_ratings, load_resources, save_ratings)
 from recommender.groq_client import chat as groq_chat, explain_recommendations, llm_recommend, web_search_recommend
-
+from recommender.nlp_features import MultilingualSupport
 st.set_page_config(page_title="Learning Resource Recommender", page_icon="▣", layout="wide")
 
 LEVEL_CLASS = {"Beginner": "level-beginner", "Intermediate": "level-intermediate", "Advanced": "level-advanced"}
@@ -338,14 +338,19 @@ with tab_rec:
 
 # ---- Search
 with tab_search:
-    query = st.text_input("Search by keywords", placeholder="e.g. neural networks pytorch")
+    query = st.text_input("Search by keywords", placeholder="e.g. neural networks pytorch (any language)")
     if query:
+        detected_lang = MultilingualSupport.detect_language(query)
+        if detected_lang != "en" and detected_lang != "unknown":
+            st.info(f"Detected language: {detected_lang} — translating to English for search...")
+            query_en = MultilingualSupport.translate_to_english(query, detected_lang)
+            st.caption(f"Translated query: {query_en}")
+            query = query_en
         results = engine.search(query, top_n=10)
         if not results:
             st.warning("No results found.")
         for r, s in results:
             resource_card(r, "search", s, score_label="Relevance")
-
 # ---- Learning path
 with tab_path:
     c1, c2 = st.columns([3, 1])

@@ -16,10 +16,11 @@ FORMATS = ["Video Course", "Book", "Tutorial", "Interactive", "Article", "Projec
 # Weights of each signal in the hybrid score (they are re-normalised at run time,
 # e.g. collaborative weight is redistributed when a user has not rated anything).
 DEFAULT_WEIGHTS = {
-    "content": 0.45,        # TF-IDF similarity between profile and resource text
-    "collaborative": 0.25,  # item-item collaborative filtering on community ratings
-    "knowledge": 0.20,      # rule-based fit: skill level + preferred format
-    "popularity": 0.10,     # global resource quality rating
+    "content": 0.40,
+    "collaborative": 0.25,
+    "knowledge": 0.20,
+    "popularity": 0.10,
+    "sentiment": 0.05,  
 }
 
 # A rating >= LIKE_THRESHOLD counts as "liked", <= DISLIKE_THRESHOLD as "disliked".

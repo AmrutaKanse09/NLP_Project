@@ -21,7 +21,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from .config import DEFAULT_WEIGHTS, DISLIKE_THRESHOLD, LEVEL_INDEX, LEVELS, LIKE_THRESHOLD
 from .profile import UserProfile
-
+from .nlp_features import SentimentAnalyzer, TopicModeler, MultilingualSupport
 STRATEGIES = ["hybrid", "content", "collaborative", "knowledge", "popular"]
 CF_SHRINKAGE = 0.5
 
@@ -43,6 +43,11 @@ class RecommenderEngine:
         self._text = self._build_text()
         self._fit_content_model()
         self.set_ratings(ratings)
+                # --- NLP features: sentiment + discovered topics ---
+        self.sentiment_analyzer = SentimentAnalyzer()
+        self.resources = self.sentiment_analyzer.analyze_dataframe(self.resources, "description")
+        self.topic_modeler = TopicModeler(n_topics=5, method="lda")
+        self.resources = self.topic_modeler.assign_topics(self.resources, "description")
 
     # ------------------------------------------------------------------ models
     def _build_text(self) -> pd.Series:
@@ -165,17 +170,29 @@ class RecommenderEngine:
         if strategy not in STRATEGIES:
             raise ValueError(f"strategy must be one of {STRATEGIES}")
 
+        # 1. Compute individual signals FIRST
         content = self.content_scores(profile)
         cf = self.collaborative_scores(profile)
         knowledge = self.knowledge_scores(profile)
         popularity = self.popularity_scores()
-        signals = {"content": content, "collaborative": cf, "knowledge": knowledge, "popularity": popularity}
+
+        # 2. Sentiment signal from resource descriptions
+        if "description_polarity" in self.resources.columns:
+            raw_sentiment = self.resources["description_polarity"].fillna(0.0).values
+            sentiment = (raw_sentiment + 1.0) / 2.0   # map VADER -1..1 to 0..1
+        else:
+            sentiment = np.zeros(self.n)
+
+        # 3. Build signals ONCE, after all variables exist
+        signals = {"content": content, "collaborative": cf, "knowledge": knowledge,
+                   "popularity": popularity, "sentiment": sentiment}
 
         if strategy == "hybrid":
             w = dict(weights or self.weights)
-            if cf is None:                      # cold start: no ratings yet
+            w.setdefault("sentiment", 0.05)          # small default weight
+            if cf is None:                            # cold start
                 w["collaborative"] = 0.0
-            if not content.any():               # no interests given
+            if not content.any():                     # no interests given
                 w["content"] = 0.0
             total = sum(w.values()) or 1.0
             w = {k: v / total for k, v in w.items()}
@@ -273,3 +290,13 @@ class RecommenderEngine:
                 stages.append({"level": level, "resources": items,
                                "hours": sum(x["duration_hours"] for x in items)})
         return stages
+    def search_by_discovered_topic(self, topic_keyword: str, top_n: int = 10) -> list:
+        """Search resources by their auto-discovered LDA/NMF topic."""
+        mask = self.resources["discovered_topic"].fillna("").str.contains(
+            topic_keyword, case=False, na=False
+        )
+        idxs = [i for i in np.argsort(-self.resources["topic_confidence"].fillna(0).values) if mask[i]]
+        results = []
+        for i in idxs[:top_n]:
+            results.append((self.resources.iloc[i].to_dict(), round(float(self.resources.iloc[i]["topic_confidence"]), 3)))
+        return results
